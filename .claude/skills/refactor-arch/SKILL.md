@@ -384,6 +384,90 @@ nothing and invents nothing:
    or per-stack refactor — the same guidelines and playbook drive Flask and
    Express identically. (Reference spec Section 5, Contract B.)
 
+### 3.2 — Capture the pre-refactor endpoint baseline
+
+**Before mutating any file**, record how the app behaves today, so behavior can
+be proven preserved afterward:
+
+1. Boot the application in its **current** (pre-refactor) form using its existing
+   entry point (e.g., `python app.py` / `flask run` / `npm start` / `node
+   src/index.js`), reading the real start command from the manifest or README.
+2. Enumerate the original endpoints from the current routes (method + path). Use
+   the audited route definitions as the source of truth for what exists.
+3. Send a representative request to each endpoint and **record its response** —
+   HTTP status and body shape (and, where relevant, key fields). This recorded
+   set is the **baseline**. Keep it in context; it is the comparison target in
+   3.5.
+4. Stop the pre-refactor app. If it cannot be booted at all in this environment
+   (missing runtime, uninstallable deps, required external service absent), record
+   that the baseline could not be captured and treat the endpoint check in 3.5 as
+   **unverified** rather than passed — never claim endpoints match a baseline that
+   was never taken.
+
+The baseline capture reads and runs the app but is itself part of the refactor
+step that the gate already authorized; it writes no source changes.
+
+### 3.3 — Restructure in place into the six MVC layers
+
+Using `references/mvc-guidelines.md` as the target, restructure the project **in
+place** on the working tree into the six layers, adapting the directory/file
+names to the detected stack while preserving each layer's responsibility:
+
+1. **Config** — create a config module and **extract all configuration and
+   credentials out of source into it**, read from environment variables (apply
+   playbook **P-01**). No literal secret, DB URL, port, or environment-specific
+   value may remain hardcoded anywhere else. Ship a **`.env.example`** documenting
+   every required variable; do **not** create or commit a real `.env`.
+2. **Models** — move all data access (schema, persistence, queries) into a models
+   layer, one concern per domain entity. No raw SQL or ORM calls remain in routes
+   or controllers.
+3. **Views / Routes** — reduce route handlers to thin routing: parse the request,
+   call a controller, return its result. No business logic or DB access in a
+   route.
+4. **Controllers** — move business logic / orchestration (validation, coordinating
+   models, business rules, response shaping) into controllers, decoupled from the
+   web framework.
+5. **Centralized error handling** — register a single error-handling
+   middleware/handler that formats every error consistently and never leaks stack
+   traces to clients; handlers raise/bubble rather than each formatting their own
+   errors.
+6. **Entry point / composition root** — establish one clear entry point that loads
+   config, constructs dependencies, injects them downward, registers routes and
+   the error handler, and starts the server. Modules must not self-instantiate
+   global connections at import time.
+
+Move code in **small steps**, keeping the app runnable between moves (playbook
+P-03). Match the illustrative target tree in `mvc-guidelines.md` (`config/`,
+`models/`, `routes/` or `views/`, `controllers/`, `middleware/`, and an entry
+point such as `app.py` / `index.js`), adapted to the stack.
+
+### 3.4 — Apply one playbook pattern per audited finding
+
+Walk the F03 findings (the fix set from 3.1) and eliminate each one with the
+**named `refactoring-playbook.md` pattern its catalog entry maps to** — the fix
+is chosen from the playbook, never improvised:
+
+- Map each finding's anti-pattern to its pattern via the playbook's coverage map,
+  e.g. `AP-01 → P-01` (extract config/secrets), `AP-04 → P-03` (split God
+  File/Class into MVC layers), `AP-05 → P-04` (business logic → controllers),
+  `AP-06 → P-05` (dependency injection), `AP-07 → P-06` (fix N+1),
+  `AP-03 → P-08` (centralize auth middleware), `AP-09 → P-09` (centralize error
+  handling), `AP-10 → P-10` (magic numbers → constants), `AP-11 → P-11` (replace
+  deprecated API), `AP-12 → P-12` (rename for intent), etc. Apply the pattern's
+  **After** shape to the audited `file:line`.
+- Every audited anti-pattern must be **addressed via a playbook pattern** — the
+  transformation is the concrete, principled fix for that finding, not an ad-hoc
+  edit.
+- **Unsafe transformations are left unresolved.** If a finding cannot be safely
+  transformed (ambiguous behavior, the change would alter semantics, the pattern
+  does not cleanly apply), **leave that code unchanged** and record the finding as
+  **unresolved** for the summary. Never apply a partial or best-effort change that
+  risks breaking the app — an honest unresolved finding beats a broken edit.
+
+Keep a running map of `finding → pattern applied` (or `→ unresolved`) — it is
+printed in the 3.6 summary and is the evidence that each audited anti-pattern was
+addressed.
+
 ---
 
 ## Orchestration-level Error Handling

@@ -146,6 +146,49 @@ Source files: 4 (app.py, controllers.py, models.py, database.py)
 DB tables:    produtos, usuarios, pedidos
 ```
 
+### 1.4 — Read-only guarantee
+
+Phase 1 **modifies no file**. It only reads and globs the project tree to gather
+detection signals and print the summary. Do not create, edit, delete, move, or
+write any file — including no scratch files, no `reports/` directory, and no
+intermediate `analysis.json`. Any writing of the project's source or of new
+files is a Phase 1 contract violation. The stack profile and architecture map
+are carried **in conversation context**, not persisted to disk.
+
+### 1.5 — Empty-source guard
+
+If, after applying the Language and Architecture heuristics, the current working
+directory contains **no analyzable source files** (an empty tree, or only
+docs / config / vendor directories with no detected-language source), print
+exactly:
+
+```
+No analyzable source files found
+```
+
+and **stop before Phase 2**. Do not proceed to the Audit phase, do not print a
+`PHASE 1: PROJECT ANALYSIS` block, and modify no file. This is the guard that
+prevents any downstream phase from running against an empty or unrecognized
+directory.
+
+### 1.6 — Stack profile + architecture map hand-off (to Phase 2 / F03)
+
+The printed summary is also the in-context hand-off consumed by Phase 2. Carry
+every field forward so the F03 audit reasons over it **without re-detecting**:
+
+| Field | Part of | Guaranteed to contain |
+|-------|---------|-----------------------|
+| Language | Stack profile | The detected language |
+| Framework + version | Stack profile | Framework and version, or `version unknown` |
+| Dependencies | Stack profile | Declared direct dependencies from the manifest |
+| Domain | Stack profile | Short domain phrase + key entities |
+| Architecture | Architecture map | High-level structure description |
+| Source files analyzed | Architecture map | Accurate count + the file list scanned |
+| Database tables/entities | Architecture map | Each detected table/entity, or `No database layer detected` |
+
+Every field above is present in the printed summary and available in context for
+Phase 2. No source file is written while producing this contract.
+
 ---
 
 ## Phase 2 — Audit

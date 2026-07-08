@@ -1,92 +1,105 @@
-from datetime import datetime
+"""Assorted helpers.
+
+Domain constants now live in ``config.constants`` (P-10) and are re-exported
+here for backward compatibility; the duplicate literal definitions that used to
+sit at the bottom of this file were removed.
+"""
 import re
-import os
-import json
-import sys
-import math
-import hashlib
+import uuid
+from datetime import datetime
+
+from utils.timeutils import now_utc
+from config.constants import (
+    VALID_TASK_STATUSES,
+    VALID_USER_ROLES,
+    MAX_TITLE_LENGTH,
+    MIN_TITLE_LENGTH,
+    MIN_PASSWORD_LENGTH,
+    DEFAULT_PRIORITY,
+    DEFAULT_CATEGORY_COLOR,
+    MIN_PRIORITY,
+    MAX_PRIORITY,
+    EMAIL_REGEX,
+)
+
+# Backward-compatible aliases (kept so existing imports don't break).
+VALID_STATUSES = VALID_TASK_STATUSES
+VALID_ROLES = VALID_USER_ROLES
+DEFAULT_COLOR = DEFAULT_CATEGORY_COLOR
+
 
 def format_date(date_obj):
-    if date_obj:
-        return str(date_obj)
-    return None
+    return str(date_obj) if date_obj else None
+
 
 def calculate_percentage(part, total):
     if total == 0:
         return 0
     return round((part / total) * 100, 2)
 
+
 def validate_email(email):
+    return bool(re.match(EMAIL_REGEX, email))
 
-    if re.match(r'^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$', email):
-        return True
-    return False
 
-def sanitize_string(s):
+def sanitize_string(value):
+    return value.strip() if value else value
 
-    if s:
-        return s.strip()
-    return s
 
 def generate_id():
-
-    import uuid
     return str(uuid.uuid4())
 
-def log_action(action, details=None):
 
-    timestamp = datetime.utcnow()
-    print(f"[{timestamp}] ACTION: {action}")
+def log_action(action, details=None):
+    print(f"[{now_utc()}] ACTION: {action}")
     if details:
         print(f"  DETAILS: {details}")
 
+
 def parse_date(date_string):
-    try:
-        return datetime.strptime(date_string, '%Y-%m-%d')
-    except:
+    for date_format in ('%Y-%m-%d', '%d/%m/%Y'):
         try:
-            return datetime.strptime(date_string, '%d/%m/%Y')
-        except:
-            return None
+            return datetime.strptime(date_string, date_format)
+        except (ValueError, TypeError):
+            continue
+    return None
+
 
 def is_valid_color(color):
-    if color and len(color) == 7 and color[0] == '#':
-        return True
-    return False
+    return bool(color) and len(color) == 7 and color[0] == '#'
+
 
 def process_task_data(data, existing_task=None):
     result = {}
 
     if 'title' in data:
         title = data['title']
-        if title:
-            title = title.strip()
-            if len(title) >= 3 and len(title) <= 200:
-                result['title'] = title
-            else:
-                return None, 'Título deve ter entre 3 e 200 caracteres'
-        else:
+        if not title:
             return None, 'Título não pode ser vazio'
+        title = title.strip()
+        if MIN_TITLE_LENGTH <= len(title) <= MAX_TITLE_LENGTH:
+            result['title'] = title
+        else:
+            return None, 'Título deve ter entre 3 e 200 caracteres'
 
     if 'description' in data:
         result['description'] = data['description']
 
     if 'status' in data:
-        valid_statuses = ['pending', 'in_progress', 'done', 'cancelled']
-        if data['status'] in valid_statuses:
+        if data['status'] in VALID_TASK_STATUSES:
             result['status'] = data['status']
         else:
             return None, 'Status inválido'
 
     if 'priority' in data:
         try:
-            p = int(data['priority'])
-            if p >= 1 and p <= 5:
-                result['priority'] = p
-            else:
-                return None, 'Prioridade deve ser entre 1 e 5'
-        except:
+            priority = int(data['priority'])
+        except (ValueError, TypeError):
             return None, 'Prioridade inválida'
+        if MIN_PRIORITY <= priority <= MAX_PRIORITY:
+            result['priority'] = priority
+        else:
+            return None, 'Prioridade deve ser entre 1 e 5'
 
     if 'due_date' in data:
         if data['due_date']:
@@ -100,17 +113,6 @@ def process_task_data(data, existing_task=None):
 
     if 'tags' in data:
         tags = data['tags']
-        if type(tags) == list:
-            result['tags'] = ','.join(tags)
-        else:
-            result['tags'] = tags
+        result['tags'] = ','.join(tags) if isinstance(tags, list) else tags
 
     return result, None
-
-VALID_STATUSES = ['pending', 'in_progress', 'done', 'cancelled']
-VALID_ROLES = ['user', 'admin', 'manager']
-MAX_TITLE_LENGTH = 200
-MIN_TITLE_LENGTH = 3
-MIN_PASSWORD_LENGTH = 4
-DEFAULT_PRIORITY = 3
-DEFAULT_COLOR = '#000000'

@@ -1,88 +1,64 @@
-from flask import Flask, jsonify, request
+"""Layer 6 — Composition root (P-05). Loads config, constructs the single DB
+connection, injects it into repositories, wires controllers and routes, and
+registers the centralized error handler. Nothing self-instantiates a global
+connection at import time."""
+from flask import Flask
 from flask_cors import CORS
-import controllers
-from database import get_db
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = "minha-chave-super-secreta-123"
-app.config["DEBUG"] = True
-CORS(app)
+from config import settings
+from models.db import create_connection, init_schema, seed_if_empty
+from models.produto import ProdutoRepository
+from models.usuario import UsuarioRepository
+from models.pedido import PedidoRepository
+from models.system import SystemRepository
+from controllers.produto_controller import ProdutoController
+from controllers.usuario_controller import UsuarioController
+from controllers.pedido_controller import PedidoController
+from controllers.system_controller import SystemController
+from routes.produto_routes import make_produto_blueprint
+from routes.usuario_routes import make_usuario_blueprint
+from routes.pedido_routes import make_pedido_blueprint
+from routes.relatorio_routes import make_relatorio_blueprint
+from routes.system_routes import make_system_blueprint
+from middleware.errors import register_error_handlers
+from middleware.auth import make_require_admin
 
-app.add_url_rule("/produtos", "listar_produtos", controllers.listar_produtos, methods=["GET"])
-app.add_url_rule("/produtos/busca", "buscar_produtos", controllers.buscar_produtos, methods=["GET"])
-app.add_url_rule("/produtos/<int:id>", "buscar_produto", controllers.buscar_produto, methods=["GET"])
-app.add_url_rule("/produtos", "criar_produto", controllers.criar_produto, methods=["POST"])
-app.add_url_rule("/produtos/<int:id>", "atualizar_produto", controllers.atualizar_produto, methods=["PUT"])
-app.add_url_rule("/produtos/<int:id>", "deletar_produto", controllers.deletar_produto, methods=["DELETE"])
 
-app.add_url_rule("/usuarios", "listar_usuarios", controllers.listar_usuarios, methods=["GET"])
-app.add_url_rule("/usuarios/<int:id>", "buscar_usuario", controllers.buscar_usuario, methods=["GET"])
-app.add_url_rule("/usuarios", "criar_usuario", controllers.criar_usuario, methods=["POST"])
-app.add_url_rule("/login", "login", controllers.login, methods=["POST"])
+def create_app(db=None):
+    app = Flask(__name__)
+    app.config["SECRET_KEY"] = settings.SECRET_KEY
+    app.config["DEBUG"] = settings.DEBUG
+    CORS(app)
 
-app.add_url_rule("/pedidos", "criar_pedido", controllers.criar_pedido, methods=["POST"])
-app.add_url_rule("/pedidos", "listar_todos_pedidos", controllers.listar_todos_pedidos, methods=["GET"])
-app.add_url_rule("/pedidos/usuario/<int:usuario_id>", "listar_pedidos_usuario", controllers.listar_pedidos_usuario, methods=["GET"])
-app.add_url_rule("/pedidos/<int:pedido_id>/status", "atualizar_status_pedido", controllers.atualizar_status_pedido, methods=["PUT"])
+    # Construct the connection here (composition root) and inject downward.
+    if db is None:
+        db = create_connection(settings.DATABASE_PATH)
+    init_schema(db)
+    seed_if_empty(db)
 
-app.add_url_rule("/relatorios/vendas", "relatorio_vendas", controllers.relatorio_vendas, methods=["GET"])
+    produto_controller = ProdutoController(ProdutoRepository(db))
+    usuario_controller = UsuarioController(UsuarioRepository(db))
+    pedido_controller = PedidoController(PedidoRepository(db))
+    system_controller = SystemController(SystemRepository(db))
 
-app.add_url_rule("/health", "health_check", controllers.health_check, methods=["GET"])
+    require_admin = make_require_admin(settings.ADMIN_TOKEN)
 
-@app.route("/")
-def index():
-    return jsonify({
-        "mensagem": "Bem-vindo à API da Loja",
-        "versao": "1.0.0",
-        "endpoints": {
-            "produtos": "/produtos",
-            "usuarios": "/usuarios",
-            "pedidos": "/pedidos",
-            "login": "/login",
-            "relatorios": "/relatorios/vendas",
-            "health": "/health"
-        }
-    })
+    app.register_blueprint(make_produto_blueprint(produto_controller))
+    app.register_blueprint(make_usuario_blueprint(usuario_controller))
+    app.register_blueprint(make_pedido_blueprint(pedido_controller))
+    app.register_blueprint(make_relatorio_blueprint(pedido_controller))
+    app.register_blueprint(make_system_blueprint(system_controller, require_admin))
 
-@app.route("/admin/reset-db", methods=["POST"])
-def reset_database():
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("DELETE FROM itens_pedido")
-    cursor.execute("DELETE FROM pedidos")
-    cursor.execute("DELETE FROM produtos")
-    cursor.execute("DELETE FROM usuarios")
-    db.commit()
-    print("!!! BANCO DE DADOS RESETADO !!!")
-    return jsonify({"mensagem": "Banco de dados resetado", "sucesso": True}), 200
+    register_error_handlers(app)
+    return app
 
-@app.route("/admin/query", methods=["POST"])
-def executar_query():
-    dados = request.get_json()
-    query = dados.get("sql", "")
-    if not query:
-        return jsonify({"erro": "Query não informada"}), 400
 
-    db = get_db()
-    cursor = db.cursor()
-    try:
-        cursor.execute(query)
-        if query.strip().upper().startswith("SELECT"):
-            rows = cursor.fetchall()
-            result = [dict(row) for row in rows]
-            return jsonify({"dados": result, "sucesso": True}), 200
-        else:
-            db.commit()
-            return jsonify({"mensagem": "Query executada", "sucesso": True}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+app = create_app()
+
 
 if __name__ == "__main__":
-
-    get_db()
     print("=" * 50)
     print("SERVIDOR INICIADO")
-    print("Rodando em http://localhost:5000")
+    print("Rodando em http://localhost:" + str(settings.PORT))
     print("=" * 50)
-
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host=settings.HOST, port=settings.PORT, debug=settings.DEBUG, use_reloader=False)

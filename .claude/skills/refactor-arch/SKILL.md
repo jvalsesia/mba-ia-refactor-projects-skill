@@ -246,6 +246,42 @@ For every match, produce a finding with all of:
 Order the full set strictly **CRITICAL → HIGH → MEDIUM → LOW**; within a
 severity, most-impactful first.
 
+### 2.4 — Render the report via the template
+
+Assemble the findings into an `ARCHITECTURE AUDIT REPORT` using
+`references/report-template.md`. Fill every required block; drop none:
+
+- **Header** — `Project` (the audited directory), `Stack` (`<language> /
+  <framework> <version>`), `Domain` (from the Phase 1 profile), `Files analyzed`
+  and `Lines analyzed` (counted over the Phase 1 analyzed-file list), and `Date`.
+- **Severity Summary** — the exact line
+  `CRITICAL: n | HIGH: n | MEDIUM: n | LOW: n`, followed by
+  `Total findings: <total>`.
+- **Finding blocks** — one per finding, ordered CRITICAL → LOW, each as
+  `### [SEVERITY] <Anti-pattern name>` with **File** (`path:line`),
+  **Description**, **Impact**, and **Recommendation**.
+
+Print this report block to the user and use the same rendered content as the
+file written in 2.5.
+
+### 2.5 — Save the report and handle edge cases
+
+- **Save location.** Write the rendered report to `reports/audit-project-N.md`.
+  If the `reports/` directory does not exist, **create it first** rather than
+  failing.
+- **Numbering `N`.** Choose `N` by **sequential gap-filling**: scan `reports/`
+  for existing `audit-project-<k>.md` files and pick the lowest positive integer
+  not yet used (first run → `audit-project-1.md`, next distinct run →
+  `audit-project-2.md`), so earlier reports are preserved.
+- **Below-threshold flag.** If the total is fewer than 5 findings, still render
+  and save the report, but include the template's warning line noting the
+  minimum finding threshold (5) was not met, so the operator can widen the
+  catalog or re-run.
+- **Write failure.** If the report file cannot be written, surface the write
+  error to the user and **do not advance to the confirmation gate** — the
+  reviewer must have a saved report to review. Writing the report is the **only**
+  file write Phase 2 performs; no source file is modified.
+
 ---
 
 ## Confirmation Gate (mandatory human checkpoint)

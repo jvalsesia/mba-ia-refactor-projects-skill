@@ -468,6 +468,89 @@ Keep a running map of `finding → pattern applied` (or `→ unresolved`) — it
 printed in the 3.6 summary and is the evidence that each audited anti-pattern was
 addressed.
 
+### 3.5 — Validate: boot check + endpoint baseline comparison
+
+After restructuring, prove the refactor is safe with **two** checks. Both must
+pass for success (3.6):
+
+1. **Boot check.** Start the refactored app through its new entry point.
+   - If it **fails to boot**, capture the error and the offending step; the boot
+     check is **✗**. Do not run the endpoint check against a dead app and do not
+     declare success — go straight to reporting the boot failure (see error
+     handling below).
+   - If it **boots without errors**, the boot check is **✓**; continue.
+2. **Endpoint check (before/after baseline compare).** Re-run the **same**
+   requests captured in the 3.2 baseline against the refactored app and compare
+   each response to its baseline (status + body shape/key fields).
+   - Every original endpoint whose refactored response **matches** its baseline
+     passes. If **any** endpoint's status or shape **regresses** (differs from
+     baseline, errors, or stops responding), the endpoint check is **✗** and you
+     record **which** endpoint(s) regressed.
+   - All endpoints match → endpoint check **✓**.
+   - If no baseline could be captured in 3.2, mark the endpoint check
+     **unverified** (not ✓) and treat the run as not meeting the success gate.
+
+Also re-check the audited findings: confirm **zero targeted anti-patterns
+remain** (each finding either transformed or explicitly unresolved).
+
+### 3.6 — Emit `PHASE 3: REFACTORING COMPLETE`
+
+Print the summary block **only after** the 3.5 checks have run. It must contain,
+in order:
+
+| Block | Content |
+|-------|---------|
+| **Title** | Exactly `PHASE 3: REFACTORING COMPLETE` |
+| **New structure** | The new MVC directory tree (config, models, routes/views, controllers, middleware, entry point), adapted to the stack |
+| **Transformations applied** | Each audited finding paired with the playbook pattern used to fix it (e.g., `AP-01 → P-01`), or marked **unresolved** if it could not be safely applied |
+| **Validation checklist** | `Application boots without errors` ✓/✗ · `All endpoints respond correctly` ✓/✗ (vs baseline) · `Zero targeted anti-patterns remaining` ✓/✗ |
+| **Outcome** | Success **only if** boot ✓ **and** endpoints ✓; otherwise a failure/partial result that names the boot error or the regressed endpoint(s) |
+
+Illustrative shape (values reflect the actual run):
+
+```
+PHASE 3: REFACTORING COMPLETE
+
+New structure:
+  config/        models/        routes/
+  controllers/   middleware/     app.py
+
+Transformations applied:
+  AP-01 (Hardcoded secrets) → P-01 extract config/secrets
+  AP-04 (God File)          → P-03 split into MVC layers
+  AP-05 (Logic in routes)   → P-04 move logic to controllers
+  AP-07 (N+1 query)         → P-06 batched query
+  AP-11 (Deprecated API)    → P-11 replace datetime.utcnow()
+  AP-13 (…)                 → unresolved (unsafe to transform)
+
+Validation:
+  [✓] Application boots without errors
+  [✓] All endpoints respond correctly (vs pre-refactor baseline)
+  [✓] Zero targeted anti-patterns remaining
+
+Outcome: SUCCESS
+```
+
+**Success gate (non-negotiable).** Never print `Outcome: SUCCESS` unless the boot
+check **and** every endpoint check passed. A green boot with a regressed endpoint
+is still a failure; an endpoint check that is `unverified` (no baseline) is not a
+pass. In any non-success case, the block still prints, but the Outcome names the
+boot error or the regressed endpoint(s) and the checklist shows the ✗.
+
+### 3.7 — Phase 3 error handling
+
+- **Boot failure.** Report the boot error and the offending step, mark the boot
+  check ✗, and flag **validation failed** rather than declaring success. Do not
+  proceed to the endpoint check.
+- **Endpoint regression.** Report exactly which endpoint(s) regressed (path +
+  how the response differs from baseline) so the operator can review before
+  committing; mark the endpoint check ✗ and do not declare success.
+- **Unsafe transformation.** Report the affected finding as **unresolved** and
+  leave that code unchanged rather than applying a partial/broken change.
+- **Success requires both checks.** Phase 3 is reported successful only when the
+  boot check and the endpoint checks **both** pass; otherwise the summary reports
+  a failure/partial result. (Reference PRD F04 Error Handling; spec Section 6.)
+
 ---
 
 ## Orchestration-level Error Handling

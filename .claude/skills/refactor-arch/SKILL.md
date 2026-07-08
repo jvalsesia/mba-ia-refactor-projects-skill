@@ -66,14 +66,85 @@ the confirmation gate below returns `proceed`.
 
 ## Phase 1 — Analysis
 
-> Execution logic for this phase is owned by F02 and is added into this
-> section. At the orchestration level, Phase 1 must:
-> - Load and apply `references/detection-heuristics.md`.
-> - Detect language, framework/version, dependencies, database tables, domain,
->   and current architecture, and print a `PHASE 1: PROJECT ANALYSIS` summary.
-> - Modify **no** files.
-> - If the directory contains no recognizable source files, print
->   `No analyzable source files found` and **stop before Phase 2**.
+Phase 1 detects the stack and architecture of the project rooted at the current
+working directory, then prints a fixed-format `PHASE 1: PROJECT ANALYSIS`
+summary that Phase 2 reasons over. It is **strictly read-only**: it modifies no
+file. All detection knowledge comes from `references/detection-heuristics.md`
+(loaded in Step 0) — **never** from hardcoded stack assumptions baked into this
+phase.
+
+### 1.1 — Load detection knowledge
+
+Use `references/detection-heuristics.md` as the **sole** source of detection
+signals. That file defines six detection categories (Language, Framework /
+version, Dependencies, Database / tables, Domain, Architecture), each as a
+*signal → conclusion* pairing. Apply those signals; do not invent stack-specific
+rules that are not expressed there. If Step 0 could not load this file, the
+Missing-file guard has already stopped the run.
+
+### 1.2 — Apply the six detection categories to the CWD
+
+Walk the current working directory and apply each heuristic category in order.
+Prefer concrete file/content signals over guesses; when signals conflict, report
+the strongest evidence and note the ambiguity rather than assuming.
+
+1. **Language** — Glob the tree for source extensions per the heuristics'
+   Language table, count each, and pick the dominant language. Record the count
+   for the analyzed-file total below.
+2. **Framework + version** — Match the framework signals (import statements,
+   manifest entries) and read the pinned version from the dependency manifest.
+   Report a range verbatim if a range is given; report `version unknown` if no
+   version is pinned.
+3. **Dependencies** — Parse the declared **direct** dependencies from the
+   manifest (`requirements.txt` / `pyproject.toml` / `Pipfile` for Python;
+   `package.json` `dependencies`/`devDependencies` for Node.js). Report the
+   declared list, not the full transitive tree.
+4. **Database / tables** — Scan for SQL (`CREATE TABLE`, `.sql` files, migration
+   folders), ORM models (SQLAlchemy `__tablename__`, Sequelize
+   `sequelize.define`, Django `models.Model`), and raw drivers. Report each
+   detected table/entity by name.
+5. **Domain** — Infer the application domain from route paths, model names, and
+   table names (not filenames alone). Report a short phrase plus the key
+   entities.
+6. **Architecture** — Inspect layer separation and report the high-level
+   structure (monolithic / partial layering / MVC-like), per the heuristics'
+   Architecture category.
+
+**Accurate analyzed-file count.** Count source files of the detected language
+under the project root, **excluding** dependency/vendor directories
+(`node_modules`, `venv`, `.venv`, `.git`), lockfiles, and documentation. The
+reported count must equal the real number of detected-language source files a
+reviewer would find. Keep the list of scanned files so it can be printed.
+
+### 1.3 — Emit the analysis summary
+
+Print a summary block titled **exactly** `PHASE 1: PROJECT ANALYSIS` containing
+all seven fields below. Every field appears; a field with no data states the
+negative explicitly (e.g., `No database layer detected`) rather than being
+omitted.
+
+| Field | Content |
+|-------|---------|
+| **Language** | The detected language (e.g., `Python`, `Node.js`) |
+| **Framework** | Framework + version, or `version unknown` (e.g., `Flask 3.1.1`) |
+| **Dependencies** | Declared direct dependencies (e.g., `flask, flask-cors`) |
+| **Domain** | Domain phrase + key entities (e.g., `E-commerce API — produtos, usuários, pedidos`) |
+| **Architecture** | High-level structure (e.g., `Monolithic — everything in 4 files, no layer separation`) |
+| **Source files** | Accurate count + the list of analyzed source files (e.g., `4 (app.py, controllers.py, models.py, database.py)`) |
+| **DB tables** | Each detected table/entity by name, or `No database layer detected` |
+
+Example shape (values must reflect the actual project):
+
+```
+PHASE 1: PROJECT ANALYSIS
+Language:     Python
+Framework:    Flask 3.1.1
+Dependencies: flask, flask-cors
+Domain:       E-commerce API — produtos, usuários, pedidos
+Architecture: Monolithic — everything in 4 files, no layer separation
+Source files: 4 (app.py, controllers.py, models.py, database.py)
+DB tables:    produtos, usuarios, pedidos
+```
 
 ---
 

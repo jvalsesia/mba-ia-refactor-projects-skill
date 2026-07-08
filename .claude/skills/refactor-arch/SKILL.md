@@ -282,6 +282,28 @@ file written in 2.5.
   reviewer must have a saved report to review. Writing the report is the **only**
   file write Phase 2 performs; no source file is modified.
 
+### 2.6 — Reach the gate and hand off to Phase 3 (F04)
+
+Once — and only once — the report has been fully rendered **and** saved to
+`reports/audit-project-N.md`, Phase 2 is complete. Yield to the
+**Confirmation Gate** section below (owned by the orchestrator): Phase 2 does not
+implement its own prompt or decision capture. No source file has been modified at
+this point, so the gate can still abort with zero mutations.
+
+Carry forward, in context, the exact hand-off Phase 3 (F04) consumes — the same
+set reflected in the saved report:
+
+| Field | Part of | Guaranteed to contain |
+|-------|---------|-----------------------|
+| Anti-pattern name | Each finding | The catalog entry the code matched |
+| Severity | Each finding | Exactly one of CRITICAL / HIGH / MEDIUM / LOW |
+| Location | Each finding | An exact `file:line` or `file:start-end` |
+| Recommendation | Each finding | The fix, naming the playbook pattern (e.g., `P-01`) |
+| Report path | Persisted artifact | `reports/audit-project-N.md`, saved before the gate |
+
+The findings F04 eliminates are exactly this set, and the persisted report
+reflects the same findings F04 acts upon.
+
 ---
 
 ## Confirmation Gate (mandatory human checkpoint)

@@ -193,14 +193,58 @@ Phase 2. No source file is written while producing this contract.
 
 ## Phase 2 — Audit
 
-> Execution logic for this phase is owned by F03 and is added into this
-> section. At the orchestration level, Phase 2 must:
-> - Cross-reference the code against `references/anti-patterns-catalog.md`.
-> - Render the findings using `references/report-template.md`, ordered
->   CRITICAL → LOW with a per-severity summary and total.
-> - Save the report to `reports/audit-project-N.md`.
-> - Reach the confirmation gate **only after** the report is fully rendered and
->   saved — never before, and with no source file modified at this point.
+Phase 2 cross-references the analyzed project against the anti-pattern catalog,
+produces an ordered, severity-classified list of **findings** (each with an
+exact `file:line`, description, impact, and recommendation), renders them with
+`references/report-template.md`, **saves** the report to
+`reports/audit-project-N.md`, and only then reaches the confirmation gate. All
+audit knowledge comes from `references/anti-patterns-catalog.md` and
+`references/report-template.md` (loaded in Step 0) — **never** from hardcoded,
+per-project findings. Phase 2 modifies **no source file**; its only write is the
+report artifact under `reports/`.
+
+### 2.1 — Consume the Phase 1 profile (no re-detection)
+
+Reuse the **stack profile + architecture map** that Phase 1 produced and carried
+in context: language, framework + version, dependencies, domain, the analyzed
+source-file list + count, and the detected database tables. Do **not** re-detect
+the stack — Phase 1 already did. This profile is the input the audit reasons
+over, and its analyzed-file list is the source of truth for the `file:line`
+locations below and the report header's file/line counts.
+
+### 2.2 — Cross-reference against the anti-pattern catalog
+
+Load `references/anti-patterns-catalog.md` and use it as the **sole** source of
+findings. Walk the analyzed source files and, for each catalog entry, apply its
+*detection signal* to the code:
+
+- Match every catalog anti-pattern that applies (AP-01 … AP-12), including
+  **deprecated-API detection (AP-11)** when the detected stack uses a deprecated
+  API (e.g., Flask `@app.before_first_request` / `datetime.utcnow()`; Node.js
+  `new Buffer()` / `url.parse()` / an end-of-life pinned major).
+- Report only anti-patterns defined in the catalog — do not invent ad-hoc
+  findings or bake per-project results into this phase.
+- Aim for **at least 5 findings** per project, with **at least 1 CRITICAL or
+  HIGH**. Prefer concrete signals over speculation; a finding must point at real
+  code.
+
+### 2.3 — Classify and locate each finding
+
+For every match, produce a finding with all of:
+
+- **Severity** — exactly one of `CRITICAL` / `HIGH` / `MEDIUM` / `LOW`, taken
+  from the catalog entry (security/architecture failures → CRITICAL; MVC/SOLID
+  violations → HIGH; standardization/duplication/moderate performance/deprecated
+  API → MEDIUM; readability/naming/magic numbers → LOW).
+- **Location** — an exact `file:line`, or `file:start-end` for a range, resolved
+  against the Phase 1 analyzed-file list.
+- **Description** — what the code does that is wrong.
+- **Impact** — why it matters / the risk it carries.
+- **Recommendation** — the concrete fix, naming the playbook pattern the catalog
+  entry references (e.g., `P-01`, `P-03`).
+
+Order the full set strictly **CRITICAL → HIGH → MEDIUM → LOW**; within a
+severity, most-impactful first.
 
 ---
 

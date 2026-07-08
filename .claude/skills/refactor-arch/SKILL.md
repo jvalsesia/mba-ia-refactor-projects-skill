@@ -336,14 +336,53 @@ This `proceed`/`abort` decision is the control signal consumed by Phase 3 (F04).
 
 ## Phase 3 — Refactoring
 
-> Execution logic for this phase is owned by F04 and is added into this
-> section. It runs **only** when the confirmation gate above returned
-> `proceed`. At the orchestration level, Phase 3 must:
-> - Apply `references/mvc-guidelines.md` and `references/refactoring-playbook.md`.
-> - Restructure the project into MVC, extract config/secrets, centralize error
->   handling, and eliminate each audited anti-pattern via a playbook pattern.
-> - Validate by booting the app and exercising its original endpoints, and
->   never report success unless both the boot check and endpoint checks pass.
+Phase 3 restructures the audited project **in place** into the six MVC layers
+and eliminates each audited anti-pattern, then **validates** the result by
+booting the app and re-running its original endpoints against a pre-refactor
+baseline. It is the only phase that mutates source, so every change is driven by
+an F03 finding plus a named `refactoring-playbook.md` pattern — never a free-form
+rewrite. All refactoring knowledge comes from `references/mvc-guidelines.md` and
+`references/refactoring-playbook.md` (loaded in Step 0); no stack-specific rule is
+baked into this phase. Phase 3 prints a `PHASE 3: REFACTORING COMPLETE` summary
+and reports success **only** when the boot check **and** every endpoint check
+pass.
+
+### 3.0 — Gate guard (run only on `proceed`)
+
+Phase 3 executes **only** when the Confirmation Gate above returned `proceed`.
+
+- If the gate decision was `abort` (any input other than exactly `y`), Phase 3
+  **never runs**: leave the project **byte-for-byte unmodified** and exit. Do not
+  create directories, move files, or write any source — the project must be
+  indistinguishable from its pre-run state.
+- Only after confirming the decision is `proceed` may you perform the first file
+  mutation of the entire pipeline. Up to this point (Phases 1–2 + gate) no source
+  file has been touched; that invariant is what this guard preserves. (Reference
+  spec Section 5, Contract A.)
+
+### 3.1 — Consume the inputs (findings + guidelines + playbook)
+
+Phase 3 reasons over exactly three inputs already in context — it re-detects
+nothing and invents nothing:
+
+1. **F03 audit findings — the exact fix set.** Take the ordered findings Phase 2
+   handed off (anti-pattern name, severity, `file:line`/`file:start-end`,
+   recommendation) as the **complete and only** set of issues to eliminate. Do
+   not add architectural changes that do not trace to a finding, and do not skip a
+   finding that can be safely transformed. The set F04 eliminates is precisely the
+   set F03 reported. (Reference spec Section 5, Contract C.)
+2. **The persisted report — `reports/audit-project-N.md`.** Treat the saved report
+   as the authoritative record of that fix set; the transformations Phase 3
+   applies must correspond to the findings this report contains, so the report and
+   the refactor stay in agreement.
+3. **The refactoring knowledge — `mvc-guidelines.md` + `refactoring-playbook.md`.**
+   Use `references/mvc-guidelines.md` as the **sole** definition of the target
+   architecture (the six layers + conformance checklist) and
+   `references/refactoring-playbook.md` as the **sole** catalog of transformation
+   patterns (P-01 … P-12). Every change Phase 3 makes must map to a layer
+   definition and/or a named playbook pattern. Do **not** hardcode a per-project
+   or per-stack refactor — the same guidelines and playbook drive Flask and
+   Express identically. (Reference spec Section 5, Contract B.)
 
 ---
 

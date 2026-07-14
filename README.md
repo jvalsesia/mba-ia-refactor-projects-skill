@@ -26,7 +26,9 @@ Monolito de 4 arquivos (`app.py`, `controllers.py`, `models.py`, `database.py`),
 | 4 | **God File / sem separação de camadas** | HIGH | `controllers.py`, `models.py`, `app.py` | Parsing, validação, regra de negócio, SQL e resposta misturados — impossível testar em isolamento. |
 | 5 | **Lógica de negócio e acesso a banco nos handlers** | HIGH | `app.py:47-78`, `controllers.py:264-292` | Handlers abrem cursores e rodam SQL — web acoplada ao banco, sem reuso/teste. |
 | 6 | **Query N+1** | MEDIUM | `models.py:171-233` | Uma query por item por pedido — latência cresce linearmente com o volume. |
-| 7 | **Magic numbers** | LOW | `models.py:257-262` (tiers de desconto) | Literais de desconto/limites sem nome — intenção opaca e propensa a bug. |
+| 7 | **Lógica duplicada (copy-paste)** | MEDIUM | `controllers.py:28-50` vs `:72-90`; `models.py:177-200` vs `:209-232` | Validação de produto e montagem de pedido+itens copiadas — correções precisam ser feitas em vários lugares, gerando drift. |
+| 8 | **Magic numbers** | LOW | `models.py:257-262` (tiers de desconto) | Literais de desconto/limites sem nome — intenção opaca e propensa a bug. |
+| 9 | **Nomes ruins / shadowing** | LOW | `models.py:187-193`, `:219-225` | Cursores `cursor2`/`cursor3` e o builtin `id` usado como nome de parâmetro — dificultam leitura e mascaram builtin do Python. |
 
 ### Projeto 2 — `ecommerce-api-legacy` (Node.js/Express, LMS com checkout)
 
@@ -40,7 +42,9 @@ Monolito de 4 arquivos (`app.py`, `controllers.py`, `models.py`, `database.py`),
 | 4 | **Lógica de negócio no handler de rota** | HIGH | `src/AppManager.js:28-78` (`/api/checkout`) | Validação, hashing, decisão de pagamento e inserts todos no callback da rota. |
 | 5 | **Acoplamento forte / sem DI** | HIGH | `src/AppManager.js:7` | `new sqlite3.Database()` no construtor — impossível mockar/trocar. |
 | 6 | **Query N+1** | MEDIUM | `src/AppManager.js:83-127` | `financial-report` faz uma query por curso/matrícula/pagamento. |
-| 7 | **Nomes ruins** | LOW | `src/AppManager.js:29-33` | `u`, `e`, `p`, `cid`, `cc` para valores não triviais do checkout. |
+| 7 | **Lógica duplicada (copy-paste)** | MEDIUM | `src/AppManager.js:38,41,51,55` | Blocos `res.status(5xx).send("Erro …")` quase idênticos repetidos ao longo do checkout — drift de comportamento de erro. |
+| 8 | **Magic numbers** | LOW | `src/utils.js:18-22`, `src/AppManager.js:46` | `badCrypto` itera `10000`x, `substring(0,2)`/`(0,10)` e a decisão de pagamento usa o literal `"4"` (`cc.startsWith("4")`) — intenção opaca. |
+| 9 | **Nomes ruins** | LOW | `src/AppManager.js:29-33` | `u`, `e`, `p`, `cid`, `cc` para valores não triviais do checkout. |
 
 ### Projeto 3 — `task-manager-api` (Python/Flask, Task Manager parcialmente organizado)
 
@@ -54,7 +58,9 @@ Já possui `models/`, `routes/`, `services/`, `utils/` — mas a organização n
 | 4 | **God File** | HIGH | `report_routes.py` (reports **+** CRUD de Category), `task_routes.py` (300 linhas) | Responsabilidades não relacionadas no mesmo arquivo. |
 | 5 | **Uso de API deprecated** | MEDIUM | `datetime.utcnow()` (espalhado) + `Model.query.get()` | Deprecated no Python 3.12 / SQLAlchemy 2.0 — quebra no próximo upgrade. |
 | 6 | **Query N+1** | MEDIUM | `task_routes.py:41-57`, `report_routes.py:53-68` | `User.query.get()` / `Category.query.get()` por iteração. |
-| 7 | **Magic numbers / duplicação** | LOW | status/prioridade inline, `utils/helpers.py` ignorado | Constantes já existiam em `helpers.py` mas as rotas as reimplementam. |
+| 7 | **Lógica duplicada (copy-paste)** | MEDIUM | `task_routes.py:30-39` (repetido em `:71-80`, `:283-287`, `user_routes.py:171-180`, `report_routes.py:33-37`) | Cálculo de "atrasada" copiado em 5 handlers, mesmo já existindo `Task.is_overdue()` — drift no relatório de atraso. |
+| 8 | **Magic numbers** | LOW | status/prioridade inline (`task_routes.py:96-100,110,113`), porta SMTP `587`, janela `days=7` | Constantes já existiam em `utils/helpers.py` (`VALID_STATUSES`, `MAX_TITLE_LENGTH`) mas as rotas as reimplementam. |
+| 9 | **Nomes ruins** | LOW | `report_routes.py:24-28` (`p1..p5`), `models/category.py:14` (`d`), `utils/helpers.py:25` (`s`) | Valores não triviais com nomes de uma letra — elevam o custo de leitura e mudança segura. |
 
 ## B) Construção da Skill
 
